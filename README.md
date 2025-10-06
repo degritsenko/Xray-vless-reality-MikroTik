@@ -1,4 +1,5 @@
 Тут инструкция, как завести контейнер c xray-vless туннелем, который можно подключать к 3x-ui панели. Как заворачивать траффик в тунель можно почитать [тут](https://gist.github.com/degritsenko/64bd43e0d854fc730b71a45872be3542).
+Собранные образы можно взять на [docker hub](https://hub.docker.com/r/gritsenko/xray-mikrotik)
 
 ```
 /container/config set registry-url=https://registry-1.docker.io tmpdir=/docker/tmp
@@ -18,4 +19,11 @@ add key=SHORT_ID_SID      name=xvr value=abcdef123456
 /ip firewall nat add action=masquerade chain=srcnat out-interface=xray-vless
 
 /container/add remote-image=gritsenko/xray-mikrotik:arm64 hostname=xray-vless interface=xray-vless logging=no start-on-boot=yes envlist=xvr root-dir=/docker/container-xray-mikrotik dns=172.18.20.5
+```
+
+Как собирать для разных архитектур:
+```
+docker buildx build --platform linux/arm64 -t username/xray-mikrotik:arm64 --push -f Dockerfile_arm64 
+docker buildx build --platform linux/arm -t username/xray-mikrotik:amd64 --push -f Dockerfile_arm .
+docker buildx build --platform linux/amd64 -t username/xray-mikrotik:amd64 --push -f Dockerfile_amd64 .
 ```
