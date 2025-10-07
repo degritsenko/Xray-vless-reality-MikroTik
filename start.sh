@@ -1,26 +1,33 @@
 #!/bin/sh
 echo "Starting setup container please wait"
-sleep 1
 
 cleanup() {
     echo "Stopping Xray and tun2socks"
     killall xray
     killall tun2socks
-    sleep 2 
     exit 0
 }
 
 trap cleanup SIGTERM
 
-SERVER_IP_ADDRESS=$(ping -c 1 "$SERVER_ADDRESS" | awk -F'[()]' '{print $2}' | head -n1)
+: "${SERVER_ADDRESS:?Environment variable SERVER_ADDRESS not set}"
+: "${SERVER_PORT:?Environment variable SERVER_PORT not set}"
+: "${USER_ID:?Environment variable USER_ID not set}"
+: "${ENCRYPTION:?Environment variable ENCRYPTION not set}"
+: "${FINGERPRINT_FP:?Environment variable FINGERPRINT_FP not set}"
+: "${SERVER_NAME_SNI:?Environment variable SERVER_NAME_SNI not set}"
+: "${PUBLIC_KEY_PBK:?Environment variable PUBLIC_KEY_PBK not set}"
+: "${SHORT_ID_SID:?Environment variable SHORT_ID_SID not set}"
 
-NET_IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE '^lo|^tun0' | head -n1 | cut -d'@' -f1)
-
+SERVER_IP_ADDRESS=$(getent hosts "$SERVER_ADDRESS" | awk '{print $1; exit}' || true)
 if [ -z "$SERVER_IP_ADDRESS" ]; then
-  echo "Failed to obtain an IP address for FQDN $SERVER_ADDRESS"
+  echo "Failed to resolve $SERVER_ADDRESS"
   echo "Please configure DNS on Mikrotik"
   exit 1
 fi
+
+NET_IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE '^lo|^tun0' | head -n1 | cut -d'@' -f1)
+
 
 ip tuntap del mode tun dev tun0 2>/dev/null
 ip tuntap add mode tun dev tun0
@@ -90,12 +97,10 @@ cat <<EOF > /opt/xray/config/config.json
 EOF
 
 echo "Xray and tun2socks preparing for launch"
-rm -rf /tmp/xray/ && mkdir /tmp/xray/
-7z x /opt/xray/xray.7z -o/tmp/xray/ -y > /dev/null 2>&1
+mkdir -p /tmp/xray /tmp/tun2socks
+7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null
 chmod 755 /tmp/xray/xray
-
-rm -rf /tmp/tun2socks/ && mkdir /tmp/tun2socks/
-7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks/ -y > /dev/null 2>&1
+7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks -y >/dev/null
 chmod 755 /tmp/tun2socks/tun2socks
 
 echo "Start Xray core"
@@ -106,4 +111,4 @@ echo "Start tun2socks"
 
 echo "Container customization is complete"
 
-wait
+wait -n
