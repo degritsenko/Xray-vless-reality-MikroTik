@@ -98,16 +98,16 @@ EOF
 
 echo "Xray and tun2socks preparing for launch"
 mkdir -p /tmp/xray /tmp/tun2socks
-7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null
+7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null && rm -f /opt/xray/xray.7z
 chmod 755 /tmp/xray/xray
-7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks -y >/dev/null
+7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks -y >/dev/null && rm -f /opt/tun2socks/tun2socks.7z
 chmod 755 /tmp/tun2socks/tun2socks
 
 echo "Start Xray core"
 /tmp/xray/xray run -config /opt/xray/config/config.json &
 
 echo "Start tun2socks"
-/tmp/tun2socks/tun2socks -loglevel silent -tcp-sndbuf 3m -tcp-rcvbuf 3m -device tun0 -proxy socks5://127.0.0.1:10800 -interface "$NET_IFACE" &
+/tmp/tun2socks/tun2socks -loglevel silent -device tun0 -proxy socks5://127.0.0.1:10800 -interface "$NET_IFACE" &
 
 echo "Container customization is complete"
 
