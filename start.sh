@@ -9,7 +9,7 @@ cleanup() {
 }
 trap cleanup SIGTERM
 
-# Проверка обязательных переменных
+# Проверка обязательных переменных окружения
 : "${SERVER_ADDRESS:?Environment variable SERVER_ADDRESS not set}"
 : "${SERVER_PORT:?Environment variable SERVER_PORT not set}"
 : "${USER_ID:?Environment variable USER_ID not set}"
@@ -19,7 +19,7 @@ trap cleanup SIGTERM
 : "${PUBLIC_KEY_PBK:?Environment variable PUBLIC_KEY_PBK not set}"
 : "${SHORT_ID_SID:?Environment variable SHORT_ID_SID not set}"
 
-# Разрешение DNS имени
+# Разрешение IP сервера
 SERVER_IP_ADDRESS=$(getent hosts "$SERVER_ADDRESS" | awk '{print $1; exit}' || true)
 if [ -z "$SERVER_IP_ADDRESS" ]; then
   echo "Failed to resolve $SERVER_ADDRESS"
@@ -43,7 +43,7 @@ ip route add "$SERVER_IP_ADDRESS/32" via 172.18.20.5
 rm -f /etc/resolv.conf
 echo "nameserver 172.18.20.5" > /etc/resolv.conf
 
-# Конфиг Xray
+# Создание конфига Xray
 mkdir -p /opt/xray/config
 cat <<EOF > /opt/xray/config/config.json
 {
@@ -101,12 +101,11 @@ cat <<EOF > /opt/xray/config/config.json
 }
 EOF
 
-echo "Xray and tun2socks preparing for launch"
+# --- Распаковка бинарников во временный каталог ---
+echo "Preparing binaries in /tmp"
 mkdir -p /tmp/xray /tmp/tun2socks
 
-# Распаковка бинарников, если их нет
 if [ ! -f /tmp/xray/xray ]; then
-    echo "Extracting Xray..."
     7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null || {
         echo "Failed to extract /opt/xray/xray.7z"
         exit 1
@@ -115,7 +114,6 @@ if [ ! -f /tmp/xray/xray ]; then
 fi
 
 if [ ! -f /tmp/tun2socks/tun2socks ]; then
-    echo "Extracting tun2socks..."
     7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks -y >/dev/null || {
         echo "Failed to extract /opt/tun2socks/tun2socks.7z"
         exit 1
@@ -123,6 +121,7 @@ if [ ! -f /tmp/tun2socks/tun2socks ]; then
     chmod 755 /tmp/tun2socks/tun2socks
 fi
 
+# --- Запуск ---
 echo "Starting Xray core"
 /tmp/xray/xray run -config /opt/xray/config/config.json &
 
