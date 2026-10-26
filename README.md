@@ -1,115 +1,67 @@
 # Xray VLESS + REALITY для MikroTik
 
-Контейнер использует встроенный TUN Xray. tun2socks и отдельный SOCKS-порт не требуются.
+RouterOS 7.25 · AMD64 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://hub.docker.com/r/gritsenko/xray-mikrotik/tags?name=latest)
 
-Целевая конфигурация: **MikroTik hAP ax², RouterOS 7.25, ARM64, IPv4**.
-Сервер должен поддерживать VLESS + REALITY по TCP без обязательного `flow`.
+Команды для новой установки. Уже существующие записи повторно не добавлять. Внешний интерфейс — `wan`.
 
-## Параметры подключения
+## 1. Переменные xvr
 
-Существующие имена переменных окружения сохраняются:
-
-| Переменная | Значение |
-|---|---|
-| `SERVER_ADDRESS` | IPv4 или домен сервера с A-записью |
-| `SERVER_PORT` | Порт сервера, целое число от 1 до 65535 |
-| `USER_ID` | UUID пользователя |
-| `ENCRYPTION` | Обычно `none`, в соответствии с сервером |
-| `FINGERPRINT_FP` | Например, `chrome` |
-| `SERVER_NAME_SNI` | SNI из настроек сервера |
-| `PUBLIC_KEY_PBK` | Публичный ключ REALITY |
-| `SHORT_ID_SID` | Short ID сервера; переменная обязательна, значение может быть пустым |
-
-Переменные задаются в списке окружения контейнера на RouterOS. Для действующей установки можно сохранить существующий список `xvr`.
-
-Шаблон [config.template.json](config.template.json) заполняется при запуске через `jq`. Готовый конфиг проверяется командой `xray run -test` до изменения сети. При ошибке запуск прекращается.
-
-## Сеть и DNS
-
-Для существующей установки сохраняются:
-
-- интерфейс `xray-vless`;
-- адрес контейнера `172.18.20.6/30`;
-- шлюз MikroTik `172.18.20.5`;
-- DNS контейнера `172.18.20.5`;
-- действующие правила выбора трафика и NAT на MikroTik.
-
-Адрес `172.18.20.5` остаётся в настройках RouterOS. Скрипт не зашивает его в конфиг и не перезаписывает `/etc/resolv.conf`: используется DNS, переданный контейнеру RouterOS. MikroTik должен принимать DNS-запросы от контейнера; firewall должен разрешать этот доступ.
-
-При запуске скрипт разрешает IPv4 сервера и определяет физический интерфейс и шлюз по текущему маршруту к нему. Этот же IPv4 используется в outbound Xray и в отдельном маршруте вне TUN; SNI сохраняется отдельно. Изменение IP домена применяется при следующем запуске контейнера.
-
-Скрипт создаёт `tun0` с адресом `172.31.200.10/30`, направляет в него default route и запускает Xray через `exec`. Xray открывает подготовленный TUN и становится главным процессом контейнера. Его исходящие соединения привязаны к физическому интерфейсу.
-
-Для новой установки сначала создайте veth, адрес шлюза и NAT по аналогии с действующей схемой. Выбор трафика для VPN выполняется на MikroTik; его правила должны учитывать FastTrack и не отправлять соединение к самому VPN-серверу обратно в туннель.
-
-## Сборка ARM64
-
-Из каталога проекта:
-
-```bash
-docker buildx build --platform linux/arm64 \
-  --load -t gritsenko/xray-mikrotik:tun-arm64 .
-```
-
-Для переноса образа на MikroTik файлом:
-
-```bash
-docker save -o xray-mikrotik-arm64.tar \
-  gritsenko/xray-mikrotik:tun-arm64
-```
-
-Загрузите архив на диск MikroTik и добавьте контейнер из файла через WinBox или CLI. Для него укажите существующие интерфейс и список переменных, `dns=172.18.20.5`, отдельный root-dir, `start-on-boot=yes` и на время проверки `logging=yes`. После завершения импорта выполните первый запуск вручную.
-
-Пример для существующего списка `xvr` и файла `/docker/xray-mikrotik-arm64.tar`:
+Подставьте параметры своего сервера. Для пустого Short ID используйте `value=""`.
 
 ```routeros
-/container/add file=/docker/xray-mikrotik-arm64.tar hostname=xray-vless interface=xray-vless envlist=xvr dns=172.18.20.5 root-dir=/docker/container-xray-native-tun logging=yes start-on-boot=yes
+/container/envs/add list=xvr key=SERVER_ADDRESS value="vpn.example.com"
+/container/envs/add list=xvr key=SERVER_PORT value="443"
+/container/envs/add list=xvr key=USER_ID value="11111111-1111-4111-8111-111111111111"
+/container/envs/add list=xvr key=ENCRYPTION value="none"
+/container/envs/add list=xvr key=FINGERPRINT_FP value="chrome"
+/container/envs/add list=xvr key=SERVER_NAME_SNI value="example.com"
+/container/envs/add list=xvr key=PUBLIC_KEY_PBK value="REPLACE_WITH_SERVER_PUBLIC_KEY"
+/container/envs/add list=xvr key=SHORT_ID_SID value="abcdef123456"
+```
+
+## 2. Сеть
+
+`xray-veth` не включать в мост.
+
+```routeros
+/interface/veth/add name=xray-veth address=172.18.20.6/30 gateway=172.18.20.5 gateway6=""
+/ip/address/add address=172.18.20.5/30 interface=xray-veth comment="Xray container gateway"
+```
+
+## 3. DNS и NAT
+
+DNS-правила должны находиться перед запретом input. В `place-before` указан комментарий запрещающего правила — замените его, если у вас он другой.
+
+```routeros
+/ip/dns/set allow-remote-requests=yes
+/ip/firewall/filter/add chain=input action=accept in-interface=xray-veth src-address=172.18.20.6 dst-address=172.18.20.5 protocol=udp dst-port=53 place-before=[find where chain=input and comment="drop all not coming from LAN"] comment="container -> local DNS (UDP/53)"
+/ip/firewall/filter/add chain=input action=accept in-interface=xray-veth src-address=172.18.20.6 dst-address=172.18.20.5 protocol=tcp dst-port=53 place-before=[find where chain=input and comment="drop all not coming from LAN"] comment="container -> local DNS (TCP/53)"
+# LAN -> Xray: обратный трафик возвращается через 172.18.20.5
+/ip/firewall/nat/add chain=srcnat action=masquerade out-interface=xray-veth comment="Traffic to Xray container"
+# Xray -> WAN: выход контейнера к VPN-серверу
+/ip/firewall/nat/add chain=srcnat action=masquerade src-address=172.18.20.6/32 out-interface=wan comment="Xray container internet access"
+```
+
+## 4. Контейнер
+
+```routeros
+/container/config/set registry-url=https://registry-1.docker.io tmpdir=/docker/tmp
+/container/add remote-image=gritsenko/xray-mikrotik:latest hostname=xray-vless interface=xray-veth envlists=xvr dns=172.18.20.5 root-dir=/docker/xray-native-tun logging=yes start-on-boot=yes
 /container/print
 ```
 
-После окончания извлечения запустите новый контейнер по его номеру из `/container/print`.
+После окончания загрузки запустите контейнер по его номеру, например `0`:
 
-Локальная сборка и `docker save` ничего не публикуют в Docker Hub. При публикации используйте отдельный версионный тег; `latest` можно оставлять дополнительным тегом.
-
-## Переход с предыдущего образа
-
-1. Сохраните прежний образ, root-dir и настройки контейнера для отката.
-2. Остановите старый контейнер.
-3. Установите новый образ в **отдельный root-dir**, сохранив переменные, интерфейс и DNS.
-4. Запустите новый контейнер с включённым журналированием.
-5. Проверьте TCP, UDP и DNS с устройства, трафик которого направлен в туннель.
-
-Не запускайте старый и новый контейнер одновременно на одном интерфейсе.
-
-## Обновление Xray
-
-Архивы Xray по-прежнему обновляются вручную в `xray-core/`. Распаковка и кеширование бинарника не изменены: существующий `/tmp/xray/xray` повторно не распаковывается. Для применения нового архива используйте новый образ и чистый root-dir.
-
-Для текущей ARM64-конфигурации используется `xray-core/Xray-linux-arm64.7z`. Остальные архивы Xray сохранены, но проверка этой миграции выполняется только для ARM64.
-
-## Проверка ARM64
-
-```bash
-docker build --platform linux/arm64 -t xray-mikrotik:test-arm64 .
-sh tests/test-arm64.sh xray-mikrotik:test-arm64
+```routeros
+/container/start 0
 ```
 
-Проверки выполняются в изолированных Linux-контейнерах с доступом к TUN и правами настройки их собственной сети. Они проверяют запуск одного процесса, TUN, маршруты, сохранение DNS, пустой shortId, отклонение неверных параметров, повторный запуск и остановку.
+## 5. Маршрут xoxo
 
-Сквозной тест TCP и DNS по UDP через локальный VLESS + REALITY-сервер:
+Настройка таблицы `xoxo` и выбора трафика: [инструкция](https://gist.github.com/degritsenko/64bd43e0d854fc730b71a45872be3542). Маршрут через контейнер:
 
-```bash
-sh tests/test-e2e-arm64.sh xray-mikrotik:test-arm64
+```routeros
+/ip/route/add dst-address=0.0.0.0/0 gateway=172.18.20.6 routing-table=xoxo distance=1
 ```
 
-Сквозной тест создаёт изолированную Docker-сеть и временные контейнеры, которые удаляются при завершении. Python и OpenSSL устанавливаются только в отдельный тестовый образ, в рабочий контейнер они не добавляются.
-
-Эти проверки не заменяют тест на самом MikroTik с вашим REALITY-сервером.
-
-## Диагностика и откат
-
-Ошибка обязательного параметра, разрешения адреса, конфигурации Xray или сетевой операции останавливает запуск. Причина выводится в журнал контейнера.
-
-`start-on-boot` отвечает за запуск при загрузке MikroTik. Автоматическое восстановление после сбоя настраивается отдельно средствами RouterOS; одного `start-on-boot` для этого недостаточно.
-
-Для отката остановите новый контейнер и запустите прежний с сохранёнными настройками и root-dir.
+Выбор трафика — действующими mangle-правилами с `new-routing-mark=xoxo`. Этот трафик исключить из FastTrack. Соединение контейнера к VPN-серверу оставить в `main` через WAN.
