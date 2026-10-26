@@ -1,15 +1,11 @@
 #!/bin/sh
-echo "Starting setup container please wait"
+set -eu
 
-cleanup() {
-    echo "Stopping Xray and tun2socks"
-    killall xray 2>/dev/null
-    killall tun2socks 2>/dev/null
-    exit 0
+fail() {
+    echo "Startup failed: $*" >&2
+    exit 1
 }
-trap cleanup SIGTERM
 
-# Проверка обязательных переменных окружения
 : "${SERVER_ADDRESS:?Environment variable SERVER_ADDRESS not set}"
 : "${SERVER_PORT:?Environment variable SERVER_PORT not set}"
 : "${USER_ID:?Environment variable USER_ID not set}"
@@ -17,115 +13,69 @@ trap cleanup SIGTERM
 : "${FINGERPRINT_FP:?Environment variable FINGERPRINT_FP not set}"
 : "${SERVER_NAME_SNI:?Environment variable SERVER_NAME_SNI not set}"
 : "${PUBLIC_KEY_PBK:?Environment variable PUBLIC_KEY_PBK not set}"
-: "${SHORT_ID_SID:?Environment variable SHORT_ID_SID not set}"
+: "${SHORT_ID_SID?Environment variable SHORT_ID_SID not set}"
 
-# Разрешение IP сервера
-SERVER_IP_ADDRESS=$(getent hosts "$SERVER_ADDRESS" | awk '{print $1; exit}' || true)
-if [ -z "$SERVER_IP_ADDRESS" ]; then
-  echo "Failed to resolve $SERVER_ADDRESS"
-  echo "Please configure DNS on Mikrotik"
-  exit 1
-fi
+SERVER_PORT=$(jq -en --arg value "$SERVER_PORT" \
+    '$value | select(test("^[0-9]+$")) | tonumber | select(. >= 1 and . <= 65535)') \
+    || fail "SERVER_PORT must be an integer between 1 and 65535"
 
-# Определение интерфейса
-NET_IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE '^lo|^tun0' | head -n1 | cut -d'@' -f1)
+# Use the DNS configuration supplied by RouterOS; do not rewrite resolv.conf.
+SERVER_IP_ADDRESS=$(getent ahostsv4 "$SERVER_ADDRESS" | awk '{print $1; exit}')
+[ -n "$SERVER_IP_ADDRESS" ] \
+    || fail "Cannot resolve an IPv4 address for $SERVER_ADDRESS; check the container DNS"
 
-# Настройка туннеля
-ip tuntap del mode tun dev tun0 2>/dev/null
-ip tuntap add mode tun dev tun0
-ip addr add 172.31.200.10/30 dev tun0
-ip link set dev tun0 up
-ip route del default via 172.18.20.5 2>/dev/null
-ip route add default via 172.31.200.10
-ip route add "$SERVER_IP_ADDRESS/32" via 172.18.20.5
+# On a repeated start, the existing server /32 route still identifies the uplink.
+SERVER_ROUTE=$(ip -4 -j route get "$SERVER_IP_ADDRESS")
+NET_IFACE=$(printf '%s' "$SERVER_ROUTE" | jq -er '.[0].dev | select(. != null and . != "tun0")') \
+    || fail "Cannot determine the physical interface for $SERVER_IP_ADDRESS"
+NET_GATEWAY=$(printf '%s' "$SERVER_ROUTE" | jq -r '.[0].gateway // empty')
 
-# Настройка DNS
-rm -f /etc/resolv.conf
-echo "nameserver 172.18.20.5" > /etc/resolv.conf
-
-# Создание конфига Xray
-mkdir -p /opt/xray/config
-cat <<EOF > /opt/xray/config/config.json
-{
-  "log": {
-    "access": "none",
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": 10800,
-      "listen": "0.0.0.0",
-      "protocol": "socks",
-      "settings": {
-        "udp": true
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "routeOnly": true
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "$SERVER_ADDRESS",
-            "port": $SERVER_PORT,
-            "users": [
-              {
-                "id": "$USER_ID",
-                "encryption": "$ENCRYPTION",
-                "alterId": 0
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "fingerprint": "$FINGERPRINT_FP",
-          "serverName": "$SERVER_NAME_SNI",
-          "publicKey": "$PUBLIC_KEY_PBK",
-          "spiderX": "",
-          "shortId": "$SHORT_ID_SID"
-        }
-      },
-      "tag": "proxy"
-    }
-  ]
-}
-EOF
-
-# --- Распаковка бинарников во временный каталог ---
-echo "Preparing binaries in /tmp"
-mkdir -p /tmp/xray /tmp/tun2socks
-
+# Keep the existing archive extraction/cache behavior.
+echo "Preparing Xray binary in /tmp"
+mkdir -p /tmp/xray
 if [ ! -f /tmp/xray/xray ]; then
-    7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null || {
-        echo "Failed to extract /opt/xray/xray.7z"
-        exit 1
-    }
+    7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null \
+        || fail "Cannot extract /opt/xray/xray.7z"
     chmod 755 /tmp/xray/xray
 fi
 
-if [ ! -f /tmp/tun2socks/tun2socks ]; then
-    7z x /opt/tun2socks/tun2socks.7z -o/tmp/tun2socks -y >/dev/null || {
-        echo "Failed to extract /opt/tun2socks/tun2socks.7z"
-        exit 1
-    }
-    chmod 755 /tmp/tun2socks/tun2socks
+umask 077
+mkdir -p /opt/xray/config
+jq --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$SERVER_PORT" '
+    .outbounds[0].settings.vnext[0] |= (
+        .address = $server |
+        .port = $port |
+        .users[0].id = env.USER_ID |
+        .users[0].encryption = env.ENCRYPTION
+    ) |
+    .outbounds[0].streamSettings.realitySettings |= (
+        .fingerprint = env.FINGERPRINT_FP |
+        .serverName = env.SERVER_NAME_SNI |
+        .publicKey = env.PUBLIC_KEY_PBK |
+        .shortId = env.SHORT_ID_SID
+    ) |
+    .outbounds[0].streamSettings.sockopt.interface = $iface
+' /opt/xray/config.template.json > /opt/xray/config/config.json
+
+# Reject bad configurations before changing any routes.
+/tmp/xray/xray run -test -config /opt/xray/config/config.json \
+    || fail "Xray configuration is invalid"
+
+# Create a persistent TUN that Xray will open by name when it starts.
+if ip link show dev tun0 >/dev/null 2>&1; then
+    ip tuntap del dev tun0 mode tun
 fi
+ip tuntap add dev tun0 mode tun
+ip addr add 172.31.200.10/30 dev tun0
+ip link set dev tun0 up
 
-# --- Запуск ---
-echo "Starting Xray core"
-/tmp/xray/xray run -config /opt/xray/config/config.json &
+# Pin the same IPv4 used in the Xray outbound before switching the default.
+if [ -n "$NET_GATEWAY" ]; then
+    ip -4 route replace "$SERVER_IP_ADDRESS/32" via "$NET_GATEWAY" dev "$NET_IFACE"
+else
+    ip -4 route replace "$SERVER_IP_ADDRESS/32" dev "$NET_IFACE"
+fi
+ip -4 route replace default dev tun0
 
-echo "Starting tun2socks"
-/tmp/tun2socks/tun2socks -loglevel silent -device tun0 -proxy socks5://127.0.0.1:10800 -interface "$NET_IFACE" &
-
-wait -n
+echo "Starting Xray with native TUN (IPv4)"
+exec /tmp/xray/xray run -config /opt/xray/config/config.json
