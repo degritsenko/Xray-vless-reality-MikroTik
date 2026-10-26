@@ -31,7 +31,6 @@ NET_IFACE=$(printf '%s' "$SERVER_ROUTE" | jq -er '.[0].dev | select(. != null an
 NET_GATEWAY=$(printf '%s' "$SERVER_ROUTE" | jq -r '.[0].gateway // empty')
 
 # Keep the existing archive extraction/cache behavior.
-echo "Preparing Xray binary in /tmp"
 mkdir -p /tmp/xray
 if [ ! -f /tmp/xray/xray ]; then
     7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null \
@@ -77,5 +76,4 @@ else
 fi
 ip -4 route replace default dev tun0
 
-echo "Starting Xray with native TUN (IPv4)"
 exec /tmp/xray/xray run -config /opt/xray/config/config.json
