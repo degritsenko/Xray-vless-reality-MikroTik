@@ -55,13 +55,3 @@ DNS-правила должны находиться перед запретом
 ```routeros
 /container/start 0
 ```
-
-## 5. Маршрут xoxo
-
-Настройка таблицы `xoxo` и выбора трафика: [инструкция](https://gist.github.com/degritsenko/64bd43e0d854fc730b71a45872be3542). Маршрут через контейнер:
-
-```routeros
-/ip/route/add dst-address=0.0.0.0/0 gateway=172.18.20.6 routing-table=xoxo distance=1
-```
-
-Выбор трафика — действующими mangle-правилами с `new-routing-mark=xoxo`. Этот трафик исключить из FastTrack. Соединение контейнера к VPN-серверу оставить в `main` через WAN.

@@ -30,14 +30,6 @@ NET_IFACE=$(printf '%s' "$SERVER_ROUTE" | jq -er '.[0].dev | select(. != null an
     || fail "Cannot determine the physical interface for $SERVER_IP_ADDRESS"
 NET_GATEWAY=$(printf '%s' "$SERVER_ROUTE" | jq -r '.[0].gateway // empty')
 
-# Keep the existing archive extraction/cache behavior.
-mkdir -p /tmp/xray
-if [ ! -f /tmp/xray/xray ]; then
-    7z x /opt/xray/xray.7z -o/tmp/xray -y >/dev/null \
-        || fail "Cannot extract /opt/xray/xray.7z"
-    chmod 755 /tmp/xray/xray
-fi
-
 umask 077
 mkdir -p /opt/xray/config
 jq --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$SERVER_PORT" '
@@ -57,7 +49,7 @@ jq --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$S
 ' /opt/xray/config.template.json > /opt/xray/config/config.json
 
 # Reject bad configurations before changing any routes.
-/tmp/xray/xray run -test -config /opt/xray/config/config.json \
+/opt/xray/xray run -test -config /opt/xray/config/config.json \
     || fail "Xray configuration is invalid"
 
 # Create a persistent TUN that Xray will open by name when it starts.
@@ -76,4 +68,4 @@ else
 fi
 ip -4 route replace default dev tun0
 
-exec /tmp/xray/xray run -config /opt/xray/config/config.json
+exec /opt/xray/xray run -config /opt/xray/config/config.json
