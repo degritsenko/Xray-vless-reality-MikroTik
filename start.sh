@@ -32,21 +32,41 @@ NET_GATEWAY=$(printf '%s' "$SERVER_ROUTE" | jq -r '.[0].gateway // empty')
 
 umask 077
 mkdir -p /opt/xray/config
-jq --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$SERVER_PORT" '
-    .outbounds[0].settings.vnext[0] |= (
-        .address = $server |
-        .port = $port |
-        .users[0].id = env.USER_ID |
-        .users[0].encryption = env.ENCRYPTION
-    ) |
-    .outbounds[0].streamSettings.realitySettings |= (
-        .fingerprint = env.FINGERPRINT_FP |
-        .serverName = env.SERVER_NAME_SNI |
-        .publicKey = env.PUBLIC_KEY_PBK |
-        .shortId = env.SHORT_ID_SID
-    ) |
-    .outbounds[0].streamSettings.sockopt.interface = $iface
-' /opt/xray/config.template.json > /opt/xray/config/config.json
+jq -n --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$SERVER_PORT" '{
+    log: {access: "none", loglevel: "warning"},
+    inbounds: [{
+        tag: "tun-in",
+        port: 0,
+        protocol: "tun",
+        settings: {name: "tun0", mtu: 1500},
+        sniffing: {
+            enabled: true,
+            destOverride: ["http", "tls", "quic"],
+            routeOnly: true
+        }
+    }],
+    outbounds: [{
+        tag: "proxy",
+        protocol: "vless",
+        settings: {vnext: [{
+            address: $server,
+            port: $port,
+            users: [{id: env.USER_ID, encryption: env.ENCRYPTION}]
+        }]},
+        streamSettings: {
+            network: "tcp",
+            security: "reality",
+            realitySettings: {
+                fingerprint: env.FINGERPRINT_FP,
+                serverName: env.SERVER_NAME_SNI,
+                publicKey: env.PUBLIC_KEY_PBK,
+                spiderX: "",
+                shortId: env.SHORT_ID_SID
+            },
+            sockopt: {interface: $iface}
+        }
+    }]
+}' > /opt/xray/config/config.json
 
 # Reject bad configurations before changing any routes.
 /opt/xray/xray run -test -config /opt/xray/config/config.json \
