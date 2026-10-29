@@ -1,0 +1,7 @@
+.git
+.DS_Store
+xray-core
+docs
+tests
+artifacts
+**/__pycache__

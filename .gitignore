@@ -1,1 +1,6 @@
 .DS_Store
+artifacts/
+__pycache__/
+xray-core/
+docs/superpowers/
+docs/armv5-build-report.md
