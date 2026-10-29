@@ -1,6 +1,6 @@
 # Xray VLESS + REALITY для MikroTik
 
-RouterOS 7.25 · AMD64 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://hub.docker.com/r/gritsenko/xray-mikrotik/tags?name=latest)
+RouterOS 7.25 · AMD64 / ARMv5 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://hub.docker.com/r/gritsenko/xray-mikrotik/tags?name=latest)
 
 Команды для новой установки. Уже существующие записи повторно не добавлять. Внешний интерфейс — `wan`.
 
