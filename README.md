@@ -6,7 +6,7 @@ RouterOS 7.25 · AMD64 / ARMv5 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://h
 
 ## 1. Переменные xvr
 
-Подставьте параметры своего сервера. Для пустого Short ID используйте `value=""`.
+Подставьте параметры своего сервера. `FLOW` укажите, если он есть в VLESS-ссылке (например, `xtls-rprx-vision`); `SPIDER_X` — если в REALITY-ссылке есть `spx`. Если параметра в ссылке нет, соответствующую переменную не добавляйте. Для пустого Short ID используйте `value=""`.
 
 ```routeros
 /container/envs/add list=xvr key=SERVER_ADDRESS value="vpn.example.com"
