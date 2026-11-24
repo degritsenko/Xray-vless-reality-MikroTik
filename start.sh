@@ -51,7 +51,11 @@ jq -n --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port 
         settings: {vnext: [{
             address: $server,
             port: $port,
-            users: [{id: env.USER_ID, encryption: env.ENCRYPTION}]
+            users: [{
+                id: env.USER_ID,
+                encryption: env.ENCRYPTION,
+                flow: (env.FLOW // "")
+            }]
         }]},
         streamSettings: {
             network: "tcp",
@@ -60,7 +64,7 @@ jq -n --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port 
                 fingerprint: env.FINGERPRINT_FP,
                 serverName: env.SERVER_NAME_SNI,
                 publicKey: env.PUBLIC_KEY_PBK,
-                spiderX: "",
+                spiderX: (env.SPIDER_X // ""),
                 shortId: env.SHORT_ID_SID
             },
             sockopt: {interface: $iface}

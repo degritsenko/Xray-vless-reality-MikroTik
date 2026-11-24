@@ -13,6 +13,8 @@ RouterOS 7.25 · AMD64 / ARMv5 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://h
 /container/envs/add list=xvr key=SERVER_PORT value="443"
 /container/envs/add list=xvr key=USER_ID value="11111111-1111-4111-8111-111111111111"
 /container/envs/add list=xvr key=ENCRYPTION value="none"
+/container/envs/add list=xvr key=FLOW value="xtls-rprx-vision"
+/container/envs/add list=xvr key=SPIDER_X value="/"
 /container/envs/add list=xvr key=FINGERPRINT_FP value="chrome"
 /container/envs/add list=xvr key=SERVER_NAME_SNI value="example.com"
 /container/envs/add list=xvr key=PUBLIC_KEY_PBK value="REPLACE_WITH_SERVER_PUBLIC_KEY"
