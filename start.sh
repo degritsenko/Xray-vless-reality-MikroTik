@@ -24,7 +24,12 @@ SERVER_IP_ADDRESS=
 attempt=1
 while [ "$attempt" -le 6 ]; do
     SERVER_IP_ADDRESS=$(getent ahostsv4 "$SERVER_ADDRESS" | awk '{print $1; exit}')
-    [ -n "$SERVER_IP_ADDRESS" ] && break
+    if [ -n "$SERVER_IP_ADDRESS" ]; then
+        if [ "$attempt" -gt 1 ]; then
+            echo "DNS resolved $SERVER_ADDRESS to $SERVER_IP_ADDRESS (attempt $attempt/6)" >&2
+        fi
+        break
+    fi
     if [ "$attempt" -lt 6 ]; then
         echo "Waiting for DNS: cannot resolve $SERVER_ADDRESS (attempt $attempt/6)" >&2
         sleep 5

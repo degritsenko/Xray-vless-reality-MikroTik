@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM alpine:3.22 AS extract
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG XRAY_VERSION=26.9.9
-RUN apk add --no-cache ca-certificates curl unzip
+RUN apk add --no-cache ca-certificates curl unzip upx
 COPY build/xray-checksums.txt /tmp/checksums
 RUN set -eu; \
     case "$TARGETARCH/$TARGETVARIANT" in \
@@ -21,7 +21,7 @@ RUN set -eu; \
     test -n "$checksum"; \
     curl -fsSL --retry 3 "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/${asset}" -o /tmp/xray.zip; \
     echo "$checksum  /tmp/xray.zip" | sha256sum -c -; \
-    mkdir /out; unzip -j /tmp/xray.zip xray LICENSE -d /out; chmod 755 /out/xray
+    mkdir /out; unzip -j /tmp/xray.zip xray LICENSE -d /out; chmod 755 /out/xray; upx -1 /out/xray
 
 FROM busybox:1.38.0-glibc AS busybox-base
 
