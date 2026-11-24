@@ -20,9 +20,19 @@ SERVER_PORT=$(jq -en --arg value "$SERVER_PORT" \
     || fail "SERVER_PORT must be an integer between 1 and 65535"
 
 # Use the DNS configuration supplied by RouterOS; do not rewrite resolv.conf.
-SERVER_IP_ADDRESS=$(getent ahostsv4 "$SERVER_ADDRESS" | awk '{print $1; exit}')
+SERVER_IP_ADDRESS=
+attempt=1
+while [ "$attempt" -le 6 ]; do
+    SERVER_IP_ADDRESS=$(getent ahostsv4 "$SERVER_ADDRESS" | awk '{print $1; exit}')
+    [ -n "$SERVER_IP_ADDRESS" ] && break
+    if [ "$attempt" -lt 6 ]; then
+        echo "Waiting for DNS: cannot resolve $SERVER_ADDRESS (attempt $attempt/6)" >&2
+        sleep 5
+    fi
+    attempt=$((attempt + 1))
+done
 [ -n "$SERVER_IP_ADDRESS" ] \
-    || fail "Cannot resolve an IPv4 address for $SERVER_ADDRESS; check the container DNS"
+    || fail "Cannot resolve an IPv4 address for $SERVER_ADDRESS after 6 attempts; check the container DNS"
 
 # On a repeated start, the existing server /32 route still identifies the uplink.
 SERVER_ROUTE=$(ip -4 -j route get "$SERVER_IP_ADDRESS")
