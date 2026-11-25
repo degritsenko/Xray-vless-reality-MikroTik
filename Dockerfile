@@ -21,7 +21,7 @@ RUN set -eu; \
     test -n "$checksum"; \
     curl -fsSL --retry 3 "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/${asset}" -o /tmp/xray.zip; \
     echo "$checksum  /tmp/xray.zip" | sha256sum -c -; \
-    mkdir /out; unzip -j /tmp/xray.zip xray LICENSE -d /out; chmod 755 /out/xray; upx -1 /out/xray
+    mkdir /out; unzip -j /tmp/xray.zip xray LICENSE -d /out; chmod 755 /out/xray; upx --best --lzma /out/xray
 
 FROM busybox:1.38.0-glibc AS busybox-base
 
