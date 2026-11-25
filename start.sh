@@ -48,7 +48,7 @@ NET_GATEWAY=$(printf '%s' "$SERVER_ROUTE" | jq -r '.[0].gateway // empty')
 umask 077
 mkdir -p /opt/xray/config
 jq -n --arg server "$SERVER_IP_ADDRESS" --arg iface "$NET_IFACE" --argjson port "$SERVER_PORT" '{
-    log: {access: "none", loglevel: "warning"},
+    log: {access: "none", loglevel: (env.XRAY_LOG_LEVEL // "warning")},
     inbounds: [{
         tag: "tun-in",
         port: 0,

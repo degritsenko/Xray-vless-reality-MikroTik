@@ -8,13 +8,14 @@ RouterOS 7.25 · AMD64 / ARMv5 / ARMv7 / ARM64 · IPv4 · [Docker Hub](https://h
 
 ## 1. Переменные xvr
 
-Подставьте параметры своего сервера. `FLOW` укажите, если он есть в VLESS-ссылке (например, `xtls-rprx-vision`); `SPIDER_X` — если в REALITY-ссылке есть `spx`. Если параметра в ссылке нет, соответствующую переменную не добавляйте. Для пустого Short ID используйте `value=""`.
+Подставьте параметры своего сервера. `XRAY_LOG_LEVEL` необязателен, по умолчанию — `warning`. `FLOW` укажите, если он есть в VLESS-ссылке (например, `xtls-rprx-vision`); `SPIDER_X` — если в REALITY-ссылке есть `spx`. Если параметра в ссылке нет, соответствующую переменную не добавляйте. Для пустого Short ID используйте `value=""`.
 
 ```routeros
 /container/envs/add list=xvr key=SERVER_ADDRESS value="vpn.example.com"
 /container/envs/add list=xvr key=SERVER_PORT value="443"
 /container/envs/add list=xvr key=USER_ID value="11111111-1111-4111-8111-111111111111"
 /container/envs/add list=xvr key=ENCRYPTION value="none"
+/container/envs/add list=xvr key=XRAY_LOG_LEVEL value="warning"
 /container/envs/add list=xvr key=FLOW value="xtls-rprx-vision"
 /container/envs/add list=xvr key=SPIDER_X value="/"
 /container/envs/add list=xvr key=FINGERPRINT_FP value="chrome"
