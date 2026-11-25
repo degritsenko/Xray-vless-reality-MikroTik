@@ -6,7 +6,7 @@ ARG TARGETVARIANT
 FROM --platform=$BUILDPLATFORM alpine:3.22 AS extract
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG XRAY_VERSION=26.9.9
+ARG XRAY_VERSION=26.11.9
 RUN apk add --no-cache ca-certificates curl unzip upx
 COPY build/xray-checksums.txt /tmp/checksums
 RUN set -eu; \
